@@ -35,7 +35,8 @@ pids
 *.seed
 *.pid.lock
 
-# Database (keep structure, ignore data)
+# Database (may contain cached secrets from templates)
+*.db
 *.db-shm
 *.db-wal
 
