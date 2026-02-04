@@ -1,12 +1,31 @@
-# CLAUDE.md
+# cl-n8n-mcp
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+> Multi-tenant MCP SaaS Platform for n8n — 31 tools for workflow automation (Forked)
+
+**Source Repo**: https://github.com/kaewz-manga/cl-n8n-mcp
+**Original**: https://github.com/nerding-io/n8n-mcp-multi-tenant-n8n
+
+---
+
+## Quick Links
+
+| Area | Guide | Key Info |
+|------|-------|----------|
+| **Worker Code** | [`src/CLAUDE.md`](src/CLAUDE.md) | MCP server, tools, services |
+| **Dashboard** | [`dashboard/CLAUDE.md`](dashboard/CLAUDE.md) | React SaaS dashboard |
+| **React Patterns** | [`dashboard/src/CLAUDE.md`](dashboard/src/CLAUDE.md) | Components, hooks |
+| **Pages** | [`dashboard/src/pages/CLAUDE.md`](dashboard/src/pages/CLAUDE.md) | Page patterns |
+| **Components** | [`dashboard/src/components/CLAUDE.md`](dashboard/src/components/CLAUDE.md) | UI components |
+| **Contexts** | [`dashboard/src/contexts/CLAUDE.md`](dashboard/src/contexts/CLAUDE.md) | Auth, Sudo, Connection |
+| **Migrations** | [`migrations/CLAUDE.md`](migrations/CLAUDE.md) | D1 schema |
+| **Tests** | [`tests/CLAUDE.md`](tests/CLAUDE.md) | Vitest patterns |
+
+---
 
 ## Project Overview
 
 n8n-mcp (v2.33.2) is a multi-tenant MCP server that provides AI assistants with access to n8n node information through the Model Context Protocol. It bridges n8n's workflow automation platform and AI models.
 
-- **Repository**: github.com/kaewz-manga/n8n-mcp-multi-tenant-n8n
 - **Production URL**: http://localhost:3011 (container port 3000)
 - **Docker container**: `n8n-mcp-dynamic`
 - **Usage Dashboard**: http://localhost:3011/usage.html

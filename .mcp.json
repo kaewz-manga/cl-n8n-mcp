@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/memory-server"],
+      "env": {
+        "MEMORY_PATH": "C:\\Users\\kaewz\\.claude\\memory\\cl-n8n-mcp"
+      }
+    }
+  }
+}
