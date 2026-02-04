@@ -1,3 +1,7 @@
+---
+name: test-runner
+---
+
 # Test Runner Agent
 
 Run vitest tests and report failures with clear error messages.

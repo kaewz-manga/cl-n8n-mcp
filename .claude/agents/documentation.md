@@ -1,3 +1,7 @@
+---
+name: documentation
+---
+
 # Documentation Agent
 
 Update CLAUDE.md, README.md, and project documentation.

@@ -1,3 +1,7 @@
+---
+name: security-auditor
+---
+
 # Security Auditor Agent
 
 Audit auth, crypto, API keys, and security best practices.

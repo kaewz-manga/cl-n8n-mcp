@@ -1,3 +1,7 @@
+---
+name: api-tester
+---
+
 # API Tester Agent
 
 Test REST and MCP endpoints with curl commands.

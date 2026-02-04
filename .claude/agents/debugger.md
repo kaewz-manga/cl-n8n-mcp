@@ -1,3 +1,7 @@
+---
+name: debugger
+---
+
 # Debugger Agent
 
 Debug errors in cl-n8n-mcp Worker, Dashboard, API failures, logs, and unexpected behavior.

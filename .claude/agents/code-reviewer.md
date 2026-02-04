@@ -1,3 +1,7 @@
+---
+name: code-reviewer
+---
+
 # Code Reviewer Agent
 
 Review TypeScript code for quality, best practices, and anti-patterns.
