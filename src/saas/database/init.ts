@@ -52,25 +52,41 @@ async function runMigrations(db: DatabaseAdapter): Promise<void> {
   try {
     const sql = await fs.readFile(migrationsPath, 'utf-8');
 
-    // Split by semicolons and execute each statement
-    const statements = sql
-      .split(';')
+    // Remove comments and normalize whitespace
+    const cleanedSql = sql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    // Split by semicolons followed by newline (to handle multi-line statements)
+    const statements = cleanedSql
+      .split(/;\s*\n/)
       .map(s => s.trim())
-      .filter(s => s.length > 0 && !s.startsWith('--'));
+      .filter(s => s.length > 0);
+
+    let successCount = 0;
+    let skipCount = 0;
+    let errorCount = 0;
 
     for (const statement of statements) {
       try {
-        db.exec(statement + ';');
+        // Add semicolon back if not present
+        const finalStatement = statement.endsWith(';') ? statement : statement + ';';
+        db.exec(finalStatement);
+        successCount++;
       } catch (error) {
-        // Ignore "table already exists" errors
         const errorMessage = error instanceof Error ? error.message : String(error);
-        if (!errorMessage.includes('already exists')) {
-          logger.warn(`Migration statement failed: ${statement.substring(0, 50)}...`, error);
+        // Ignore "table already exists" errors
+        if (errorMessage.includes('already exists')) {
+          skipCount++;
+        } else {
+          errorCount++;
+          logger.warn(`Migration statement failed: ${statement.substring(0, 60)}...`, error);
         }
       }
     }
 
-    logger.info('Database migrations completed');
+    logger.info(`Database migrations completed: ${successCount} success, ${skipCount} skipped, ${errorCount} errors`);
   } catch (error) {
     logger.error('Failed to run migrations', error);
     throw error;
