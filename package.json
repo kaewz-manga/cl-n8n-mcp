@@ -150,6 +150,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.20.1",
+    "@types/jsonwebtoken": "^9.0.9",
+    "jsonwebtoken": "^9.0.2",
     "@n8n/n8n-nodes-langchain": "^2.3.2",
     "@supabase/supabase-js": "^2.57.4",
     "dotenv": "^16.5.0",

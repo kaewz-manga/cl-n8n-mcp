@@ -13,6 +13,11 @@ import { readFileSync } from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 import { getStartupBaseUrl, formatEndpointUrls, detectBaseUrl } from '../utils/url-detector';
+import { initUsersDatabase, closeUsersDatabase } from '../saas/database/init';
+import { validateApiKey, checkRateLimits, logApiUsage } from '../saas/services/api-key-service';
+import { connectionsRepository } from '../saas/database/users-repository';
+import { decrypt } from '../saas/services/encryption-service';
+import saasRoutes from '../saas/routes';
 import { PROJECT_VERSION } from '../utils/version';
 import {
   negotiateProtocolVersion,
@@ -154,6 +159,14 @@ export class SingleSessionHTTPServer {
    * Start the HTTP server
    */
   async start(): Promise<void> {
+    // Initialize SaaS users database
+    try {
+      await initUsersDatabase();
+      logger.info('SaaS users database initialized');
+    } catch (error) {
+      logger.warn('Failed to initialize SaaS database (non-fatal)', error);
+    }
+
     const app = express();
 
     // Create JSON parser middleware for endpoints that need it
@@ -199,6 +212,9 @@ export class SingleSessionHTTPServer {
 
     // Serve static files (usage dashboard, etc.)
     app.use(express.static(path.join(process.cwd(), 'public')));
+
+    // Mount SaaS API routes
+    app.use('/api', jsonParser, saasRoutes);
 
     // Request logging middleware
     app.use((req, res, next) => {
@@ -665,9 +681,68 @@ export class SingleSessionHTTPServer {
 
       // Enhanced authentication check with specific logging
       // Modified for multi-tenant: accept x-n8n-key header as auth fallback
-      const authHeader = req.headers.authorization || (req.headers["x-n8n-key"] ? "Bearer " + req.headers["x-n8n-key"] : undefined);
+      // Also support SaaS API keys (n2f_ prefix)
+      let authHeader = req.headers.authorization || (req.headers["x-n8n-key"] ? "Bearer " + req.headers["x-n8n-key"] : undefined);
       logger.info("[DEBUG] Auth headers check:", { authorization: req.headers.authorization, xN8nKey: req.headers["x-n8n-key"], allHeaders: Object.keys(req.headers) });
-      const isMultiTenantRequest = !!req.headers["x-n8n-key"];
+      let isMultiTenantRequest = !!req.headers["x-n8n-key"];
+      let saasApiKeyData: { userId: string; apiKeyId: string; connectionId?: string } | null = null;
+
+      // Check for SaaS API key (n2f_ prefix)
+      if (authHeader?.startsWith('Bearer n2f_')) {
+        const apiKey = authHeader.slice(7);
+        const startTime = Date.now();
+        const validation = validateApiKey(apiKey);
+
+        if (!validation.valid) {
+          logger.warn('SaaS API key validation failed', {
+            ip: req.ip,
+            reason: validation.error
+          });
+          res.status(401).json({
+            jsonrpc: '2.0',
+            error: { code: -32001, message: validation.error || 'Invalid API key' },
+            id: null
+          });
+          return;
+        }
+
+        // Check rate limits for this user
+        const rateLimitCheck = checkRateLimits(validation.userId!);
+        if (!rateLimitCheck.allowed) {
+          res.status(429).json({
+            jsonrpc: '2.0',
+            error: { code: -32000, message: rateLimitCheck.error || 'Rate limit exceeded' },
+            id: null
+          });
+          return;
+        }
+
+        // Get connection details if API key is bound to a connection
+        if (validation.connectionId) {
+          const connection = connectionsRepository.getById(validation.connectionId);
+          if (connection) {
+            // Decrypt and inject n8n credentials into headers
+            const n8nApiKey = decrypt(connection.n8n_api_key_encrypted);
+            req.headers['x-n8n-url'] = connection.n8n_url;
+            req.headers['x-n8n-key'] = n8nApiKey;
+            isMultiTenantRequest = true;
+            logger.info('SaaS API key authenticated with connection', {
+              userId: validation.userId,
+              connectionId: validation.connectionId,
+              n8nUrl: connection.n8n_url
+            });
+          }
+        }
+
+        saasApiKeyData = {
+          userId: validation.userId!,
+          apiKeyId: validation.apiKey!.id,
+          connectionId: validation.connectionId
+        };
+
+        // Mark as authenticated (skip AUTH_TOKEN check)
+        authHeader = 'Bearer SAAS_API_KEY_VALID';
+      }
 
       // Check if Authorization header is missing
       if (!authHeader) {
@@ -712,7 +787,9 @@ export class SingleSessionHTTPServer {
       // SECURITY: Use timing-safe comparison to prevent timing attacks
       // See: https://github.com/czlonkowski/n8n-mcp/issues/265 (CRITICAL-02)
       // Skip AUTH_TOKEN validation for multi-tenant requests (they use x-n8n-key instead)
-      const isValidToken = isMultiTenantRequest || (this.authToken &&
+      // Also skip for validated SaaS API keys
+      const isSaasApiKeyValid = authHeader === 'Bearer SAAS_API_KEY_VALID';
+      const isValidToken = isSaasApiKeyValid || isMultiTenantRequest || (this.authToken &&
         AuthManager.timingSafeCompare(token, this.authToken));
 
       if (!isValidToken) {
@@ -790,7 +867,23 @@ export class SingleSessionHTTPServer {
         });
       }
 
+      const requestStartTime = Date.now();
       await this.handleRequest(req, res, instanceContext);
+
+      // Log usage for SaaS API key requests
+      if (saasApiKeyData) {
+        const responseTimeMs = Date.now() - requestStartTime;
+        const toolName = req.body?.params?.name || req.body?.method || 'unknown';
+        const status = res.statusCode < 400 ? 'success' : 'error';
+        logApiUsage(
+          saasApiKeyData.userId,
+          saasApiKeyData.apiKeyId,
+          saasApiKeyData.connectionId || null,
+          toolName,
+          status,
+          responseTimeMs
+        );
+      }
 
       logger.info('POST /mcp request completed - checking response status', {
         responseHeadersSent: res.headersSent,
@@ -932,6 +1025,14 @@ export class SingleSessionHTTPServer {
           resolve();
         });
       });
+    }
+
+    // Close SaaS users database
+    try {
+      closeUsersDatabase();
+      logger.info('SaaS users database closed');
+    } catch (error) {
+      logger.warn('Error closing SaaS database', error);
     }
 
     logger.info('Single-Session HTTP server shutdown completed');

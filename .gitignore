@@ -8,6 +8,8 @@ yarn-error.log*
 # Build output
 dist/
 *.tsbuildinfo
+public/dashboard/
+dashboard/dist/
 
 # Environment files
 .env
