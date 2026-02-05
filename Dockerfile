@@ -15,7 +15,8 @@ RUN --mount=type=cache,target=/root/.npm \
     npm install --no-save typescript@^5.8.3 @types/node@^22.15.30 @types/express@^5.0.3 \
         @modelcontextprotocol/sdk@1.20.1 dotenv@^16.5.0 express@^5.1.0 axios@^1.10.0 \
         n8n-workflow@^2.3.2 uuid@^11.0.5 @types/uuid@^10.0.0 \
-        openai@^4.77.0 zod@3.24.1 lru-cache@^11.2.1 @supabase/supabase-js@^2.57.4
+        openai@^4.77.0 zod@3.24.1 lru-cache@^11.2.1 @supabase/supabase-js@^2.57.4 \
+        jsonwebtoken@^9.0.2 @types/jsonwebtoken@^9.0.9
 
 # Copy source and build
 COPY src ./src
@@ -51,6 +52,9 @@ COPY data/nodes.db ./data/
 COPY src/database/schema-optimized.sql ./src/database/
 COPY public ./public
 COPY .env.example ./
+
+# Copy migrations for SaaS database initialization
+COPY migrations ./migrations
 
 # Copy entrypoint script, config parser, and n8n-mcp command
 COPY docker/docker-entrypoint.sh /usr/local/bin/

@@ -1,0 +1,2 @@
+docker/*.sh text eol=lf
+docker/n8n-mcp text eol=lf
