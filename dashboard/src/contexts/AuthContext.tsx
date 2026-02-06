@@ -8,6 +8,7 @@ interface AuthContextType {
   loading: boolean;
   isAdmin: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  loginWithToken: (token: string) => Promise<{ success: boolean; error?: string }>;
   register: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   refreshUser: () => Promise<void>;
@@ -56,6 +57,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { success: false, error: response.error?.message || 'Login failed' };
   };
 
+  const loginWithToken = async (token: string) => {
+    localStorage.setItem('n2f_token', token);
+    const response = await authApi.me();
+    if (response.success && response.data) {
+      setUser(response.data.user);
+      setPlan(response.data.plan);
+      return { success: true };
+    }
+    localStorage.removeItem('n2f_token');
+    return { success: false, error: 'Invalid token' };
+  };
+
   const register = async (email: string, password: string) => {
     const response = await authApi.register(email, password);
     if (response.success && response.data) {
@@ -81,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         isAdmin: user?.is_admin === 1,
         login,
+        loginWithToken,
         register,
         logout,
         refreshUser,

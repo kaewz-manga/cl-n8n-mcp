@@ -46,3 +46,9 @@ export {
   type ApiKeyCreateResult,
   type ApiKeyValidationResult
 } from './services/api-key-service';
+
+export {
+  getAuthorizationUrl,
+  handleOAuthCallback,
+  getEnabledProviders
+} from './services/oauth-service';

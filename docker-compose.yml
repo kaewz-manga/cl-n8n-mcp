@@ -33,6 +33,13 @@ services:
       
       # Logging
       - LOG_LEVEL=info
+
+      # OAuth (optional - set to enable social login)
+      - GITHUB_CLIENT_ID=
+      - GITHUB_CLIENT_SECRET=
+      - GOOGLE_CLIENT_ID=
+      - GOOGLE_CLIENT_SECRET=
+      - FRONTEND_URL=http://localhost:5173
     mem_limit: 512m
     mem_reservation: 256m
     restart: unless-stopped

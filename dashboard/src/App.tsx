@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import Connections from './pages/Connections';
 import ApiKeys from './pages/ApiKeys';
 import Settings from './pages/Settings';
+import OAuthCallback from './pages/OAuthCallback';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -64,6 +65,7 @@ export default function App() {
           </PublicRoute>
         }
       />
+      <Route path="/oauth/callback" element={<OAuthCallback />} />
 
       {/* Protected routes */}
       <Route
