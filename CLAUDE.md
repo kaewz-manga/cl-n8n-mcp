@@ -1,6 +1,6 @@
 # cl-n8n-mcp
 
-> Multi-tenant MCP SaaS Platform for n8n — 31 tools for workflow automation (Forked)
+> Multi-tenant MCP SaaS Platform for n8n — 20 tools for workflow automation
 
 **Source Repo**: https://github.com/kaewz-manga/cl-n8n-mcp
 **Original**: https://github.com/nerding-io/n8n-mcp-multi-tenant-n8n
@@ -24,210 +24,177 @@
 
 ## Project Overview
 
-n8n-mcp (v2.33.2) is a multi-tenant MCP server that provides AI assistants with access to n8n node information through the Model Context Protocol. It bridges n8n's workflow automation platform and AI models.
+n8n-mcp (v2.33.2) is a multi-tenant MCP server running on **Cloudflare Workers**. It provides AI assistants with access to n8n node information through the Model Context Protocol.
 
-- **Production URL**: http://localhost:3011 (container port 3000)
-- **Docker container**: `n8n-mcp-dynamic`
-- **Usage Dashboard**: http://localhost:3011/usage.html
+- **Runtime**: Cloudflare Workers (Hono framework)
+- **Local Dev**: `wrangler dev --port 8787`
+- **Dashboard**: SPA served via Workers ASSETS binding
 
 ## Architecture
 
 ```
 src/
-├── loaders/
-│   └── node-loader.ts              # NPM package loader
-├── parsers/
-│   ├── node-parser.ts              # Node metadata parser
-│   └── property-extractor.ts       # Property/operation extraction
-├── mappers/
-│   └── docs-mapper.ts              # Documentation mapping
-├── database/
-│   ├── schema.sql                  # SQLite schema
-│   ├── node-repository.ts          # Data access layer
-│   └── database-adapter.ts         # Universal DB adapter (better-sqlite3 / sql.js)
-├── services/
-│   ├── property-filter.ts          # AI-friendly property filtering
-│   ├── example-generator.ts        # Working example generation
-│   ├── task-templates.ts           # Pre-configured node settings
-│   ├── config-validator.ts         # Configuration validation
-│   ├── enhanced-config-validator.ts # Operation-aware validation
-│   ├── node-specific-validators.ts # Per-node validation logic
-│   ├── property-dependencies.ts    # Dependency analysis
-│   ├── type-structure-service.ts   # Type structure validation
-│   ├── expression-validator.ts     # n8n expression syntax validation
-│   └── workflow-validator.ts       # Complete workflow validation
-├── types/
-│   ├── type-structures.ts          # Type structure definitions
-│   ├── instance-context.ts         # Multi-tenant instance config
-│   └── session-state.ts            # Session persistence types
-├── constants/
-│   └── type-structures.ts          # 23 type structure definitions
-├── templates/
-│   ├── template-fetcher.ts         # n8n.io API template fetcher
-│   ├── template-repository.ts      # Template DB operations
-│   └── template-service.ts         # Template business logic
+├── worker.ts                        # Workers entry point
+├── worker/
+│   ├── env.ts                       # Env type (D1, KV, ASSETS bindings)
+│   ├── hono-app.ts                  # Hono app: CORS, routes, SPA fallback
+│   ├── mcp-handler.ts               # Stateless JSON-RPC MCP handler
+│   ├── nodes-db-loader.ts           # sql.js asm.js loader for nodes.db
+│   ├── middleware/
+│   │   ├── init-services.ts         # D1/JWT/OAuth init per request
+│   │   ├── jwt-auth.ts              # JWT auth middleware (jose)
+│   │   └── rate-limiter.ts          # KV-based rate limiting
+│   └── routes/
+│       ├── index.ts                 # Route aggregator (/api)
+│       ├── auth.ts                  # Register, login, profile
+│       ├── oauth.ts                 # GitHub/Google OAuth
+│       ├── connections.ts           # n8n connection CRUD
+│       ├── api-keys.ts              # API key CRUD
+│       └── user.ts                  # Usage, plans, dashboard
 ├── mcp/
-│   ├── server.ts                   # MCP server with tools
-│   ├── tools.ts                    # Tool definitions
-│   ├── tools-documentation.ts      # Tool documentation system
-│   └── index.ts                    # Entry point with mode selection
-├── utils/
-│   ├── console-manager.ts          # Console output isolation
-│   └── logger.ts                   # Logging with HTTP awareness
-├── http-server/
-│   ├── index.ts                    # Express server setup + rate limiting
-│   ├── session-manager.ts          # Session lifecycle
-│   ├── request-handler.ts          # MCP request handling
-│   ├── session-persistence.ts      # Export/restore API
-│   ├── sse-middleware.ts           # SSE to JSON conversion
-│   └── types.ts                    # Type definitions
-├── mcp-engine.ts                   # Clean API for service integration
-├── public/
-│   └── usage.html                  # Usage dashboard UI
-└── index.ts                        # Library exports
+│   ├── server.ts                    # MCP server (stdio/Express mode)
+│   ├── tools.ts                     # 7 documentation tools
+│   ├── tools-n8n-manager.ts         # 13 management tools
+│   └── handlers/                    # Tool dispatch + handlers
+├── saas/
+│   ├── database/
+│   │   ├── init.ts                  # D1/SQLite init (AsyncDatabase)
+│   │   ├── d1-adapter.ts            # D1 → AsyncDatabase adapter
+│   │   └── users-repository.ts      # User/connection/API key repos
+│   └── services/
+│       ├── auth-service.ts          # JWT auth (jose library)
+│       ├── oauth-service.ts         # OAuth providers
+│       ├── api-key-service.ts       # API key validation
+│       └── encryption-service.ts    # Web Crypto encryption
+├── database/
+│   ├── schema.sql                   # SQLite schema (nodes)
+│   ├── node-repository.ts           # Node data access
+│   └── database-adapter.ts          # better-sqlite3 / sql.js adapter
+├── services/                        # Validation, examples, templates
+├── templates/                       # n8n.io template system
+└── utils/                           # Logger, console manager
 ```
 
 ## Common Commands
 
 ```bash
-# Build
-npm run build              # TypeScript build (run after every change)
-npm run rebuild            # Rebuild node database from n8n packages
-npm run validate           # Validate all node data
-
-# Test
-npm test                   # All tests
-npm run test:unit          # Unit tests only
-npm run test:integration   # Integration tests
-npm run test:coverage      # Tests with coverage
-npm run test:watch         # Watch mode
-
-# Single test file
-npm test -- tests/unit/services/property-filter.test.ts
-
-# Type checking
-npm run lint               # TypeScript type check
-npm run typecheck          # Same as lint
-
-# Run server
-npm start                  # stdio mode (Claude Desktop)
-npm run start:http         # HTTP mode
-npm run dev                # Build + rebuild DB + validate
-npm run dev:http           # HTTP with auto-reload
-
-# n8n updates
-npm run update:n8n:check   # Dry run check
-npm run update:n8n         # Update n8n packages
+# Development
+wrangler dev --port 8787             # Local dev server
+npm run build                        # TypeScript build
+npm run lint                         # Type check
 
 # Database
-npm run db:rebuild         # Rebuild from scratch
-npm run migrate:fts5       # Migrate to FTS5 search
+npm run rebuild                      # Rebuild nodes.db from n8n packages
+cp data/nodes.db public/data/        # Copy to static assets for Workers
 
-# Templates
-npm run fetch:templates    # Fetch from n8n.io
-npm run test:templates     # Test template system
+# Dashboard
+cd dashboard && npm run build        # Build React SPA to ./public/
 
-# Docker
-docker compose build       # Build image
-docker compose up -d       # Start container
-docker compose logs -f     # View logs
+# D1 Migrations
+wrangler d1 execute cl-n8n-mcp-users --local --file=./migrations/001_initial.sql
+
+# Deploy
+wrangler deploy                      # Deploy to Cloudflare Workers
+
+# Test
+npm test                             # All tests
+npm run test:unit                    # Unit tests only
 ```
 
-## Docker Deployment
+## Cloudflare Workers Bindings
 
-Container runs on port 3011 (mapped from internal 3000).
+Configured in `wrangler.toml`:
 
-```bash
-# Rebuild and restart after code changes
-npm run build && docker compose build && docker compose up -d
-
-# Check status
-docker ps --filter name=n8n-mcp-dynamic
-curl http://localhost:3011/health
-```
-
-**Dockerfile** uses two-stage build:
-1. Builder stage: TypeScript compilation
-2. Runtime stage: Minimal Node.js 22 Alpine with better-sqlite3
-
-Key files copied to container: `dist/`, `data/nodes.db`, `public/`, `docker/`
-
-## HTTP Endpoints
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/` | No | Server info and capabilities |
-| GET | `/health` | No | Health check with session metrics |
-| GET | `/stats?api_key=KEY` | No | Usage stats for an API key |
-| GET | `/usage.html` | No | Usage dashboard UI |
-| POST | `/mcp` | Yes | Main MCP endpoint |
-| POST | `/mcp/test` | Yes | Test endpoint |
-| DELETE | `/mcp` | Yes | Terminate session |
-
-## Rate Limiting
-
-Tracked per API key (`x-n8n-key` header), stored in-memory.
-
-| Limit | Default | Env Variable |
-|-------|---------|-------------|
-| Per minute | 50 | `RATE_LIMIT_PER_MINUTE` |
-| Per day | 100 | `DAILY_LIMIT` |
-| Auth failures | 20/15min per IP | `AUTH_RATE_LIMIT_MAX` |
-
-Middleware chain: `dailyLimiter -> rateLimiter -> authLimiter -> trackUsage -> handler`
+| Binding | Type | Description |
+|---------|------|-------------|
+| `USERS_DB` | D1 Database | SaaS user data (users, connections, API keys) |
+| `RATE_LIMITS` | KV Namespace | Distributed rate limiting |
+| `ASSETS` | Static Assets | Dashboard SPA + nodes.db |
 
 ## Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `ENABLE_MULTI_TENANT` | Yes | `true` | Multi-tenant mode |
-| `AUTH_TOKEN` | Yes (HTTP) | - | Server auth token |
-| `MCP_MODE` | No | `http` | `http`, `stdio`, or `sse` |
-| `PORT` | No | `3000` | Internal container port |
-| `RATE_LIMIT_PER_MINUTE` | No | `50` | Rate limit per API key |
-| `DAILY_LIMIT` | No | `100` | Daily limit per API key |
-| `LOG_LEVEL` | No | `info` | `error`, `warn`, `info`, `debug` |
-| `CORS_ORIGIN` | No | `*` | CORS allowed origin |
-| `TRUST_PROXY` | No | `0` | Proxy hops for IP detection |
-| `N8N_MCP_MAX_SESSIONS` | No | `100` | Max concurrent sessions |
+Set in `wrangler.toml` (public) or `.dev.vars` (secrets):
 
-## Multi-Tenant Architecture
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `AUTH_TOKEN` | Yes | MCP auth token (`.dev.vars`) |
+| `JWT_SECRET` | Yes | JWT signing secret (`.dev.vars`) |
+| `SAAS_ENCRYPTION_KEY` | Yes | Encryption key for stored API keys (`.dev.vars`) |
+| `ENABLE_MULTI_TENANT` | Yes | `true` — enables all 20 tools |
+| `CORS_ORIGIN` | No | CORS origin (default: `*`) |
+| `FRONTEND_URL` | No | OAuth callback base URL |
+| `GITHUB_CLIENT_ID/SECRET` | No | GitHub OAuth (`.dev.vars`) |
+| `GOOGLE_CLIENT_ID/SECRET` | No | Google OAuth (`.dev.vars`) |
 
-Stateless multi-tenant via request headers (no user registration):
-- `x-n8n-url`: n8n instance URL
-- `x-n8n-key`: n8n API key
-- `x-instance-id`: Optional instance identifier
-- `x-session-id`: Optional session ID
+## HTTP Endpoints
 
-Each request identifies its n8n instance. No server-side credentials stored.
+### SaaS API (`/api`)
 
-## Session Persistence (v2.24.1)
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/auth/register` | No | Register user |
+| POST | `/api/auth/login` | No | Login → JWT |
+| GET | `/api/auth/me` | JWT | User profile |
+| PUT | `/api/auth/password` | JWT | Change password |
+| DELETE | `/api/auth/account` | JWT | Delete account |
+| GET | `/api/auth/oauth/providers` | No | OAuth providers |
+| GET | `/api/auth/oauth/redirect/:provider` | No | OAuth redirect |
+| POST | `/api/auth/oauth/callback` | No | OAuth callback |
+| GET/POST/PUT/DELETE | `/api/connections/*` | JWT | n8n connections CRUD |
+| POST | `/api/connections/:id/test` | JWT | Test connection |
+| GET/POST/DELETE | `/api/api-keys/*` | JWT | API keys CRUD |
+| GET | `/api/user/usage` | JWT | Usage stats |
+| GET | `/api/user/plans` | JWT | Available plans |
+| GET | `/api/user/dashboard` | JWT | Dashboard data |
 
-Enables zero-downtime deployments for SaaS platforms.
+### MCP (`/mcp`)
 
-- `exportSessionState()` / `restoreSessionState()` methods
-- Only exports sessions with valid n8nApiUrl and n8nApiKey
-- Skips expired sessions (default timeout: 30 min)
-- Transport objects recreated on-demand (not persisted)
-- API keys exported as plaintext - downstream MUST encrypt
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/mcp` | API key or AUTH_TOKEN | JSON-RPC 2.0 MCP |
 
-Files: `src/types/session-state.ts`, `src/http-server/session-persistence.ts`, `src/mcp-engine.ts`
+### Other
 
-## MCP Tools Categories
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/health` | No | Health check |
+| GET | `/*` | No | Dashboard SPA (fallback) |
 
-1. **Discovery**: Search and explore n8n nodes
-2. **Configuration**: Node details and examples
-3. **Validation**: Config validation before deployment
-4. **Workflow**: Complete workflow validation
-5. **Management**: Create/update workflows (requires API config)
+## MCP Tools (20 total)
+
+### Documentation Tools (7) — always available
+- `tools_documentation` — Tool usage guide
+- `search_nodes` — Search n8n nodes
+- `get_node` — Get node details
+- `validate_node` — Validate node config
+- `get_template` — Get workflow template
+- `search_templates` — Search templates
+- `validate_workflow` — Validate workflow
+
+### Management Tools (13) — require n8n connection
+- `n8n_create_workflow`, `n8n_get_workflow`, `n8n_update_full_workflow`
+- `n8n_update_partial_workflow`, `n8n_delete_workflow`, `n8n_list_workflows`
+- `n8n_validate_workflow`, `n8n_autofix_workflow`, `n8n_test_workflow`
+- `n8n_executions`, `n8n_health_check`, `n8n_workflow_versions`
+- `n8n_deploy_template`
+
+## Rate Limiting
+
+KV-based distributed rate limiting per API key:
+
+| Limit | Default |
+|-------|---------|
+| Per minute | 50 |
+| Per day | 100 |
 
 ## Key Design Patterns
 
-- **Repository Pattern**: All DB operations via repository classes
-- **Service Layer**: Business logic separated from data access
-- **Validation Profiles**: minimal, runtime, ai-friendly, strict
-- **Diff-Based Updates**: 80-90% token savings on workflow updates
-- **Universal DB Adapter**: Supports both better-sqlite3 and sql.js
+- **Hono + Workers**: Typed env bindings, `c.env.USERS_DB`, `c.executionCtx.waitUntil()`
+- **Per-request init**: `initServices` middleware sets up D1/JWT/OAuth from env
+- **sql.js asm.js**: Pure JS SQLite (no WASM — Workers disallow dynamic `WebAssembly.instantiate()`)
+- **ASSETS.fetch()**: Load nodes.db and serve SPA without self-fetch loops
+- **Dynamic require**: `require(['better','sqlite3'].join('-'))` prevents esbuild bundling
+- **`__dirname` polyfill**: `globalThis.__dirname = '/'` before sql.js dynamic import
 
 ## Development Workflow
 
@@ -235,35 +202,28 @@ Files: `src/types/session-state.ts`, `src/http-server/session-persistence.ts`, `
 1. Read all relevant files first
 2. Run `npm run build` after every code change
 3. Run `npm run lint` to check types
-4. Test with `npm test`
 
-### After Code Changes to HTTP Server
-1. `npm run build`
-2. `docker compose build`
-3. `docker compose up -d`
-4. Ask user to reload MCP server in Claude Desktop if needed
+### After Code Changes
+1. `npm run build` — compile TypeScript
+2. wrangler dev auto-reloads
 
-### Performance Tips
-- Use `get_node_essentials()` over `get_node_info()` for faster responses
-- Batch validation operations when possible
-- Diff-based updates save tokens on workflow modifications
+### Rebuilding nodes.db
+1. `npm run rebuild` — generates `data/nodes.db` (uses sql.js, no FTS5)
+2. `cp data/nodes.db public/data/` — copy to static assets
+3. Restart wrangler dev
 
 ## Agent Interaction Guidelines
 
 - Sub-agents must not spawn further sub-agents
 - Sub-agents must not commit or push; the main agent handles that
 - When tasks can be divided, use parallel sub-agents
-- Use GH CLI for reviewing issues (get issue + all comments)
-- Do not use hyperbolic or dramatic language in comments/docs
 - Add to every commit and PR: Conceived by Romuald Czlonkowski - www.aiadvisors.pl/en (not in conversations)
 
 ## Important Reminders
 
 - NEVER create files unless absolutely necessary; prefer editing existing files
-- NEVER proactively create documentation files unless explicitly requested
 - Always run typecheck and lint after code changes
-- When making MCP server changes, ask user to reload before testing
 - Database rebuilds are slow due to n8n package size
-- Always validate workflows before deployment to n8n
-- HTTP mode requires proper CORS and auth token configuration
-- Integration tests require a clean database state
+- `nodes.db` must be copied to `public/data/` after rebuild for Workers to serve it
+- sql.js WASM doesn't work in Workers — use `sql-asm.js` (pure JS)
+- FTS5 not available in sql.js — search uses LIKE fallback
