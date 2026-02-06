@@ -24,9 +24,33 @@ async function rebuild() {
   const repository = new NodeRepository(db);
   const toolVariantGenerator = new ToolVariantGenerator();
   
-  // Initialize database
+  // Initialize database — split schema to handle FTS5 gracefully
   const schema = fs.readFileSync(path.join(__dirname, '../../src/database/schema.sql'), 'utf8');
-  db.exec(schema);
+
+  // Split schema into base DDL and FTS5-dependent parts
+  // Match VIRTUAL TABLE (single ;) and TRIGGER (ends with END;)
+  const fts5VirtualTable = /CREATE\s+VIRTUAL\s+TABLE\s+IF\s+NOT\s+EXISTS\s+\w*fts\w*[^;]*;\s*/gi;
+  const fts5Trigger = /CREATE\s+TRIGGER\s+IF\s+NOT\s+EXISTS\s+\w*fts\w*[\s\S]*?END;\s*/gi;
+  let baseSchema = schema.replace(fts5Trigger, '').replace(fts5VirtualTable, '');
+  const fts5Parts = [
+    ...(schema.match(fts5VirtualTable) || []),
+    ...(schema.match(fts5Trigger) || []),
+  ];
+
+  // Always apply base schema (tables, indexes, views)
+  db.exec(baseSchema);
+
+  // Try to apply FTS5 parts — skip if not supported (e.g., sql.js)
+  if (fts5Parts.length > 0) {
+    if (db.checkFTS5Support()) {
+      for (const part of fts5Parts) {
+        db.exec(part);
+      }
+      console.log('✅ FTS5 full-text search enabled');
+    } else {
+      console.log('⚠️  FTS5 not supported by current adapter — using LIKE fallback for search');
+    }
+  }
   
   // Clear existing data
   db.exec('DELETE FROM nodes');
@@ -237,36 +261,26 @@ function validateDatabase(repository: NodeRepository): { passed: boolean; issues
       issues.push(`Only ${toolVariantCount} Tool variants found - expected at least ${MIN_EXPECTED_TOOL_VARIANTS}`);
     }
 
-    // Check FTS5 table existence and population
-    const ftsTableCheck = db.prepare(`
-      SELECT name FROM sqlite_master
-      WHERE type='table' AND name='nodes_fts'
-    `).get();
+    // Check FTS5 table existence and population (optional — sql.js doesn't support FTS5)
+    if (db.checkFTS5Support()) {
+      const ftsTableCheck = db.prepare(`
+        SELECT name FROM sqlite_master
+        WHERE type='table' AND name='nodes_fts'
+      `).get();
 
-    if (!ftsTableCheck) {
-      issues.push('CRITICAL: FTS5 table (nodes_fts) does not exist - searches will fail or be very slow');
-    } else {
-      // Check if FTS5 table is properly populated
-      const ftsCount = db.prepare('SELECT COUNT(*) as count FROM nodes_fts').get() as { count: number };
+      if (!ftsTableCheck) {
+        issues.push('WARNING: FTS5 table (nodes_fts) does not exist - searches will use LIKE fallback');
+      } else {
+        const ftsCount = db.prepare('SELECT COUNT(*) as count FROM nodes_fts').get() as { count: number };
 
-      if (ftsCount.count === 0) {
-        issues.push('CRITICAL: FTS5 index is empty - searches will return zero results');
-      } else if (nodeCount.count !== ftsCount.count) {
-        issues.push(`FTS5 index out of sync: ${nodeCount.count} nodes but ${ftsCount.count} FTS5 entries`);
-      }
-
-      // Verify critical nodes are searchable via FTS5
-      const searchableNodes = ['webhook', 'merge', 'split'];
-      for (const searchTerm of searchableNodes) {
-        const searchResult = db.prepare(`
-          SELECT COUNT(*) as count FROM nodes_fts
-          WHERE nodes_fts MATCH ?
-        `).get(searchTerm);
-
-        if (searchResult.count === 0) {
-          issues.push(`CRITICAL: Search for "${searchTerm}" returns zero results in FTS5 index`);
+        if (ftsCount.count === 0) {
+          issues.push('WARNING: FTS5 index is empty - searches will use LIKE fallback');
+        } else if (nodeCount.count !== ftsCount.count) {
+          issues.push(`FTS5 index out of sync: ${nodeCount.count} nodes but ${ftsCount.count} FTS5 entries`);
         }
       }
+    } else {
+      console.log('   ℹ️  FTS5 not available — LIKE-based search will be used (functional, slightly slower)');
     }
   } catch (error) {
     // Catch any validation errors

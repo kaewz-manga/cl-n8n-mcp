@@ -13,9 +13,9 @@ router.use(jwtAuth);
  * GET /api/connections
  * List user's n8n connections
  */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const connections = connectionsRepository.getByUserId(req.user!.id);
+    const connections = await connectionsRepository.getByUserId(req.user!.id);
 
     // Don't expose encrypted API keys
     const sanitized = connections.map(c => ({
@@ -43,7 +43,7 @@ router.get('/', (req: Request, res: Response) => {
  * POST /api/connections
  * Create a new n8n connection
  */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   try {
     const { name, n8n_url, n8n_api_key } = req.body;
 
@@ -56,10 +56,10 @@ router.post('/', (req: Request, res: Response) => {
     }
 
     // Check connection limit based on plan
-    const user = usersRepository.getById(req.user!.id);
-    const plan = plansRepository.getById(user?.plan_id || 'free');
+    const user = await usersRepository.getById(req.user!.id);
+    const plan = await plansRepository.getById(user?.plan_id || 'free');
     const maxConnections = plan?.max_connections || 1;
-    const currentCount = connectionsRepository.countByUserId(req.user!.id);
+    const currentCount = await connectionsRepository.countByUserId(req.user!.id);
 
     if (currentCount >= maxConnections) {
       res.status(403).json({
@@ -86,7 +86,7 @@ router.post('/', (req: Request, res: Response) => {
     // Encrypt the API key
     const encryptedKey = encrypt(n8n_api_key);
 
-    const connection = connectionsRepository.create(
+    const connection = await connectionsRepository.create(
       req.user!.id,
       name,
       n8n_url,
@@ -118,9 +118,9 @@ router.post('/', (req: Request, res: Response) => {
  * GET /api/connections/:id
  * Get a specific connection
  */
-router.get('/:id', (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const connection = connectionsRepository.getById(req.params.id as string);
+    const connection = await connectionsRepository.getById(req.params.id as string);
 
     if (!connection || connection.user_id !== req.user!.id) {
       res.status(404).json({
@@ -153,9 +153,9 @@ router.get('/:id', (req: Request, res: Response) => {
  * PATCH /api/connections/:id
  * Update a connection
  */
-router.patch('/:id', (req: Request, res: Response) => {
+router.patch('/:id', async (req: Request, res: Response) => {
   try {
-    const connection = connectionsRepository.getById(req.params.id as string);
+    const connection = await connectionsRepository.getById(req.params.id as string);
 
     if (!connection || connection.user_id !== req.user!.id) {
       res.status(404).json({
@@ -186,10 +186,10 @@ router.patch('/:id', (req: Request, res: Response) => {
     }
 
     if (Object.keys(updates).length > 0) {
-      connectionsRepository.update(req.params.id as string, updates);
+      await connectionsRepository.update(req.params.id as string, updates);
     }
 
-    const updated = connectionsRepository.getById(req.params.id as string)!;
+    const updated = (await connectionsRepository.getById(req.params.id as string))!;
 
     res.json({
       success: true,
@@ -213,9 +213,9 @@ router.patch('/:id', (req: Request, res: Response) => {
  * DELETE /api/connections/:id
  * Delete a connection
  */
-router.delete('/:id', (req: Request, res: Response) => {
+router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    const connection = connectionsRepository.getById(req.params.id as string);
+    const connection = await connectionsRepository.getById(req.params.id as string);
 
     if (!connection || connection.user_id !== req.user!.id) {
       res.status(404).json({
@@ -225,7 +225,7 @@ router.delete('/:id', (req: Request, res: Response) => {
       return;
     }
 
-    connectionsRepository.delete(req.params.id as string);
+    await connectionsRepository.delete(req.params.id as string);
     logger.info(`Connection deleted: ${req.params.id as string}`);
 
     res.json({
@@ -246,7 +246,7 @@ router.delete('/:id', (req: Request, res: Response) => {
  */
 router.post('/:id/test', async (req: Request, res: Response) => {
   try {
-    const connection = connectionsRepository.getById(req.params.id as string);
+    const connection = await connectionsRepository.getById(req.params.id as string);
 
     if (!connection || connection.user_id !== req.user!.id) {
       res.status(404).json({
@@ -268,15 +268,15 @@ router.post('/:id/test', async (req: Request, res: Response) => {
       });
 
       if (response.ok) {
-        connectionsRepository.update(req.params.id as string, { status: 'active' });
-        connectionsRepository.updateLastTested(req.params.id as string);
+        await connectionsRepository.update(req.params.id as string, { status: 'active' });
+        await connectionsRepository.updateLastTested(req.params.id as string);
 
         res.json({
           success: true,
           data: { message: 'Connection test successful', status: 'active' }
         });
       } else {
-        connectionsRepository.update(req.params.id as string, { status: 'error' });
+        await connectionsRepository.update(req.params.id as string, { status: 'error' });
 
         res.json({
           success: false,
@@ -287,7 +287,7 @@ router.post('/:id/test', async (req: Request, res: Response) => {
         });
       }
     } catch (fetchError) {
-      connectionsRepository.update(req.params.id as string, { status: 'error' });
+      await connectionsRepository.update(req.params.id as string, { status: 'error' });
 
       res.json({
         success: false,

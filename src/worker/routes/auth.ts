@@ -1,36 +1,32 @@
-import { Router, Request, Response } from 'express';
-import { registerUser, loginUser, changePassword, getUserProfile, deleteUser } from '../services/auth-service';
-import { jwtAuth } from '../middleware/jwt-auth';
+import { Hono } from 'hono';
+import type { Env } from '../env';
+import { jwtAuth, type AuthEnv } from '../middleware/jwt-auth';
+import { registerUser, loginUser, changePassword, getUserProfile, deleteUser } from '../../saas/services/auth-service';
 
-const router = Router();
+const auth = new Hono<AuthEnv>();
 
-/**
- * POST /api/auth/register
- * Register a new user
- */
-router.post('/register', async (req: Request, res: Response) => {
+/** POST /api/auth/register */
+auth.post('/register', async (c) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = await c.req.json();
 
     if (!email || !password) {
-      res.status(400).json({
+      return c.json({
         success: false,
         error: { code: 'MISSING_FIELDS', message: 'Email and password are required' }
-      });
-      return;
+      }, 400);
     }
 
     const result = await registerUser(email, password);
 
     if (!result.success) {
-      res.status(400).json({
+      return c.json({
         success: false,
         error: { code: 'REGISTRATION_FAILED', message: result.error }
-      });
-      return;
+      }, 400);
     }
 
-    res.status(201).json({
+    return c.json({
       success: true,
       data: {
         token: result.token,
@@ -38,45 +34,40 @@ router.post('/register', async (req: Request, res: Response) => {
           id: result.user!.id,
           email: result.user!.email,
           plan_id: result.user!.plan_id,
-          is_admin: result.user!.is_admin
+          is_admin: result.user!.is_admin,
         }
       }
-    });
-  } catch (error) {
-    res.status(500).json({
+    }, 201);
+  } catch {
+    return c.json({
       success: false,
       error: { code: 'INTERNAL_ERROR', message: 'Registration failed' }
-    });
+    }, 500);
   }
 });
 
-/**
- * POST /api/auth/login
- * Login with email and password
- */
-router.post('/login', async (req: Request, res: Response) => {
+/** POST /api/auth/login */
+auth.post('/login', async (c) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = await c.req.json();
 
     if (!email || !password) {
-      res.status(400).json({
+      return c.json({
         success: false,
         error: { code: 'MISSING_FIELDS', message: 'Email and password are required' }
-      });
-      return;
+      }, 400);
     }
 
     const result = await loginUser(email, password);
 
     if (!result.success) {
-      res.status(401).json({
+      return c.json({
         success: false,
         error: { code: 'LOGIN_FAILED', message: result.error }
-      });
-      return;
+      }, 401);
     }
 
-    res.json({
+    return c.json({
       success: true,
       data: {
         token: result.token,
@@ -84,35 +75,32 @@ router.post('/login', async (req: Request, res: Response) => {
           id: result.user!.id,
           email: result.user!.email,
           plan_id: result.user!.plan_id,
-          is_admin: result.user!.is_admin
+          is_admin: result.user!.is_admin,
         }
       }
     });
-  } catch (error) {
-    res.status(500).json({
+  } catch {
+    return c.json({
       success: false,
       error: { code: 'INTERNAL_ERROR', message: 'Login failed' }
-    });
+    }, 500);
   }
 });
 
-/**
- * GET /api/auth/me
- * Get current user profile
- */
-router.get('/me', jwtAuth, async (req: Request, res: Response) => {
+/** GET /api/auth/me — requires auth */
+auth.get('/me', jwtAuth, async (c) => {
   try {
-    const profile = await getUserProfile(req.user!.id);
+    const user = c.get('user');
+    const profile = await getUserProfile(user.id);
 
     if (!profile) {
-      res.status(404).json({
+      return c.json({
         success: false,
         error: { code: 'USER_NOT_FOUND', message: 'User not found' }
-      });
-      return;
+      }, 404);
     }
 
-    res.json({
+    return c.json({
       success: true,
       data: {
         user: {
@@ -121,83 +109,76 @@ router.get('/me', jwtAuth, async (req: Request, res: Response) => {
           plan_id: profile.user.plan_id,
           is_admin: profile.user.is_admin,
           totp_enabled: profile.user.totp_enabled,
-          created_at: profile.user.created_at
+          created_at: profile.user.created_at,
         },
-        plan: profile.plan
+        plan: profile.plan,
       }
     });
-  } catch (error) {
-    res.status(500).json({
+  } catch {
+    return c.json({
       success: false,
       error: { code: 'INTERNAL_ERROR', message: 'Failed to get profile' }
-    });
+    }, 500);
   }
 });
 
-/**
- * PUT /api/auth/password
- * Change password
- */
-router.put('/password', jwtAuth, async (req: Request, res: Response) => {
+/** PUT /api/auth/password — requires auth */
+auth.put('/password', jwtAuth, async (c) => {
   try {
-    const { current_password, new_password } = req.body;
+    const user = c.get('user');
+    const { current_password, new_password } = await c.req.json();
 
     if (!current_password || !new_password) {
-      res.status(400).json({
+      return c.json({
         success: false,
         error: { code: 'MISSING_FIELDS', message: 'Current and new password are required' }
-      });
-      return;
+      }, 400);
     }
 
-    const result = await changePassword(req.user!.id, current_password, new_password);
+    const result = await changePassword(user.id, current_password, new_password);
 
     if (!result.success) {
-      res.status(400).json({
+      return c.json({
         success: false,
         error: { code: 'PASSWORD_CHANGE_FAILED', message: result.error }
-      });
-      return;
+      }, 400);
     }
 
-    res.json({
+    return c.json({
       success: true,
       data: { message: 'Password changed successfully' }
     });
-  } catch (error) {
-    res.status(500).json({
+  } catch {
+    return c.json({
       success: false,
       error: { code: 'INTERNAL_ERROR', message: 'Password change failed' }
-    });
+    }, 500);
   }
 });
 
-/**
- * DELETE /api/auth/account
- * Delete user account
- */
-router.delete('/account', jwtAuth, async (req: Request, res: Response) => {
+/** DELETE /api/auth/account — requires auth */
+auth.delete('/account', jwtAuth, async (c) => {
   try {
-    const success = await deleteUser(req.user!.id);
+    const user = c.get('user');
+    const success = await deleteUser(user.id);
 
     if (!success) {
-      res.status(400).json({
+      return c.json({
         success: false,
         error: { code: 'DELETE_FAILED', message: 'Failed to delete account' }
-      });
-      return;
+      }, 400);
     }
 
-    res.json({
+    return c.json({
       success: true,
       data: { message: 'Account deleted successfully' }
     });
-  } catch (error) {
-    res.status(500).json({
+  } catch {
+    return c.json({
       success: false,
       error: { code: 'INTERNAL_ERROR', message: 'Account deletion failed' }
-    });
+    }, 500);
   }
 });
 
-export default router;
+export default auth;

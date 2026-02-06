@@ -17,6 +17,10 @@ dashboard/dist/
 .env.*.local
 .env.test
 .env.production
+.dev.vars
+
+# Cloudflare Workers
+.wrangler/
 
 # IDE
 .vscode/

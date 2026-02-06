@@ -15,7 +15,9 @@ export class SQLiteStorageService {
   private initSync() {
     // For benchmarks, we'll use synchronous initialization
     // In real usage, this should be async
-    const Database = require('better-sqlite3');
+    // Dynamic require to prevent esbuild from resolving at build time (Workers compat)
+    const _mod = ['better', 'sqlite3'].join('-');
+    const Database = require(_mod);
     const db = new Database(this.dbPath);
     
     // Create a simple adapter

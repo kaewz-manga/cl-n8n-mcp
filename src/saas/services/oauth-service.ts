@@ -19,12 +19,42 @@ interface OAuthUserProfile {
   name?: string;
 }
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+// Env-based config for Workers, process.env fallback for Express
+let _frontendUrl = 'http://localhost:5173';
+let _githubConfig: { clientId?: string; clientSecret?: string; callbackUrl?: string } = {};
+let _googleConfig: { clientId?: string; clientSecret?: string; callbackUrl?: string } = {};
+
+export function configureOAuth(config: {
+  frontendUrl?: string;
+  github?: { clientId?: string; clientSecret?: string; callbackUrl?: string };
+  google?: { clientId?: string; clientSecret?: string; callbackUrl?: string };
+}): void {
+  if (config.frontendUrl) _frontendUrl = config.frontendUrl;
+  if (config.github) _githubConfig = config.github;
+  if (config.google) _googleConfig = config.google;
+}
+
+// Initialize from process.env if available (Express mode)
+try {
+  if (typeof process !== 'undefined' && process.env) {
+    _frontendUrl = process.env.FRONTEND_URL || _frontendUrl;
+    _githubConfig = {
+      clientId: process.env.GITHUB_CLIENT_ID,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET,
+      callbackUrl: process.env.GITHUB_CALLBACK_URL,
+    };
+    _googleConfig = {
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackUrl: process.env.GOOGLE_CALLBACK_URL,
+    };
+  }
+} catch { /* Workers mode - no process.env */ }
 
 function getOAuthConfig(provider: 'github' | 'google'): OAuthConfig | null {
   if (provider === 'github') {
-    const clientId = process.env.GITHUB_CLIENT_ID;
-    const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+    const clientId = _githubConfig.clientId;
+    const clientSecret = _githubConfig.clientSecret;
     if (!clientId || !clientSecret) return null;
 
     return {
@@ -33,14 +63,14 @@ function getOAuthConfig(provider: 'github' | 'google'): OAuthConfig | null {
       userInfoUrl: 'https://api.github.com/user',
       clientId,
       clientSecret,
-      callbackUrl: process.env.GITHUB_CALLBACK_URL || `${FRONTEND_URL}/oauth/callback`,
+      callbackUrl: _githubConfig.callbackUrl || `${_frontendUrl}/oauth/callback`,
       scope: 'user:email',
     };
   }
 
   if (provider === 'google') {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const clientId = _googleConfig.clientId;
+    const clientSecret = _googleConfig.clientSecret;
     if (!clientId || !clientSecret) return null;
 
     return {
@@ -49,7 +79,7 @@ function getOAuthConfig(provider: 'github' | 'google'): OAuthConfig | null {
       userInfoUrl: 'https://www.googleapis.com/oauth2/v2/userinfo',
       clientId,
       clientSecret,
-      callbackUrl: process.env.GOOGLE_CALLBACK_URL || `${FRONTEND_URL}/oauth/callback`,
+      callbackUrl: _googleConfig.callbackUrl || `${_frontendUrl}/oauth/callback`,
       scope: 'openid email profile',
     };
   }
@@ -131,7 +161,6 @@ async function fetchUserProfile(provider: 'github' | 'google', accessToken: stri
   if (provider === 'github') {
     let email = data.email as string | undefined;
 
-    // GitHub may not return email in profile, fetch from emails API
     if (!email) {
       const emailResponse = await fetch('https://api.github.com/user/emails', {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -173,36 +202,29 @@ export async function handleOAuthCallback(
   code: string
 ): Promise<{ success: boolean; token?: string; user?: User; error?: string }> {
   try {
-    // Exchange code for token
     const accessToken = await exchangeCodeForToken(provider, code);
     if (!accessToken) {
       return { success: false, error: 'Failed to exchange code for token' };
     }
 
-    // Fetch user profile
     const profile = await fetchUserProfile(provider, accessToken);
     if (!profile) {
       return { success: false, error: 'Failed to fetch user profile' };
     }
 
-    // Check if user exists with this OAuth provider
-    let user = usersRepository.getByOAuth(provider, profile.id);
+    let user = await usersRepository.getByOAuth(provider, profile.id);
 
     if (!user) {
-      // Check if user exists with same email (link accounts)
-      const existingUser = usersRepository.getByEmail(profile.email);
+      const existingUser = await usersRepository.getByEmail(profile.email);
       if (existingUser) {
-        // Email already registered - user should login with password or existing OAuth
         return { success: false, error: 'Email already registered. Please login with your existing method.' };
       }
 
-      // Create new OAuth user
-      user = usersRepository.createOAuth(profile.email, provider, profile.id);
+      user = await usersRepository.createOAuth(profile.email, provider, profile.id);
       logger.info(`New OAuth user registered: ${profile.email} via ${provider}`);
     }
 
-    // Generate JWT
-    const token = generateToken(user);
+    const token = await generateToken(user);
     logger.info(`OAuth login: ${profile.email} via ${provider}`);
 
     return { success: true, token, user };
@@ -217,10 +239,10 @@ export async function handleOAuthCallback(
  */
 export function getEnabledProviders(): string[] {
   const providers: string[] = [];
-  if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
+  if (_githubConfig.clientId && _githubConfig.clientSecret) {
     providers.push('github');
   }
-  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  if (_googleConfig.clientId && _googleConfig.clientSecret) {
     providers.push('google');
   }
   return providers;

@@ -691,7 +691,7 @@ export class SingleSessionHTTPServer {
       if (authHeader?.startsWith('Bearer n2f_')) {
         const apiKey = authHeader.slice(7);
         const startTime = Date.now();
-        const validation = validateApiKey(apiKey);
+        const validation = await validateApiKey(apiKey);
 
         if (!validation.valid) {
           logger.warn('SaaS API key validation failed', {
@@ -707,7 +707,7 @@ export class SingleSessionHTTPServer {
         }
 
         // Check rate limits for this user
-        const rateLimitCheck = checkRateLimits(validation.userId!);
+        const rateLimitCheck = await checkRateLimits(validation.userId!);
         if (!rateLimitCheck.allowed) {
           res.status(429).json({
             jsonrpc: '2.0',
@@ -719,7 +719,7 @@ export class SingleSessionHTTPServer {
 
         // Get connection details if API key is bound to a connection
         if (validation.connectionId) {
-          const connection = connectionsRepository.getById(validation.connectionId);
+          const connection = await connectionsRepository.getById(validation.connectionId);
           if (connection) {
             // Decrypt and inject n8n credentials into headers
             const n8nApiKey = decrypt(connection.n8n_api_key_encrypted);
@@ -875,7 +875,7 @@ export class SingleSessionHTTPServer {
         const responseTimeMs = Date.now() - requestStartTime;
         const toolName = req.body?.params?.name || req.body?.method || 'unknown';
         const status = res.statusCode < 400 ? 'success' : 'error';
-        logApiUsage(
+        await logApiUsage(
           saasApiKeyData.userId,
           saasApiKeyData.apiKeyId,
           saasApiKeyData.connectionId || null,

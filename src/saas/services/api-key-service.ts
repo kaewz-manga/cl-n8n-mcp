@@ -25,16 +25,9 @@ export interface ApiKeyValidationResult {
  * Generate a new API key
  */
 export function generateApiKey(): { fullKey: string; prefix: string; hash: string } {
-  // Generate random bytes
   const randomPart = crypto.randomBytes(API_KEY_LENGTH).toString('hex');
-
-  // Full key format: n2f_<random>
   const fullKey = `${API_KEY_PREFIX}${randomPart}`;
-
-  // Prefix for display (first 12 chars after n2f_)
   const prefix = `${API_KEY_PREFIX}${randomPart.substring(0, 12)}`;
-
-  // Hash for storage
   const hash = hashApiKey(fullKey);
 
   return { fullKey, prefix, hash };
@@ -43,34 +36,29 @@ export function generateApiKey(): { fullKey: string; prefix: string; hash: strin
 /**
  * Create a new API key for a user
  */
-export function createApiKey(userId: string, connectionId: string | null, name: string): ApiKeyCreateResult {
+export async function createApiKey(userId: string, connectionId: string | null, name: string): Promise<ApiKeyCreateResult> {
   try {
-    // Validate user exists
-    const user = usersRepository.getById(userId);
+    const user = await usersRepository.getById(userId);
     if (!user) {
       return { success: false, error: 'User not found' };
     }
 
-    // Validate connection if provided
     if (connectionId) {
-      const connection = connectionsRepository.getById(connectionId);
+      const connection = await connectionsRepository.getById(connectionId);
       if (!connection || connection.user_id !== userId) {
         return { success: false, error: 'Connection not found or does not belong to user' };
       }
     }
 
-    // Generate the key
     const { fullKey, prefix, hash } = generateApiKey();
-
-    // Store in database
-    const apiKey = apiKeysRepository.create(userId, connectionId, name, hash, prefix);
+    const apiKey = await apiKeysRepository.create(userId, connectionId, name, hash, prefix);
 
     logger.info(`API key created for user ${userId}: ${prefix}...`);
 
     return {
       success: true,
       apiKey,
-      fullKey // Only returned once!
+      fullKey
     };
   } catch (error) {
     logger.error('Failed to create API key', error);
@@ -81,31 +69,24 @@ export function createApiKey(userId: string, connectionId: string | null, name: 
 /**
  * Validate an API key and return associated data
  */
-export function validateApiKey(fullKey: string): ApiKeyValidationResult {
+export async function validateApiKey(fullKey: string): Promise<ApiKeyValidationResult> {
   try {
-    // Check prefix
     if (!fullKey.startsWith(API_KEY_PREFIX)) {
       return { valid: false, error: 'Invalid API key format' };
     }
 
-    // Hash the provided key
     const hash = hashApiKey(fullKey);
-
-    // Get prefix for lookup (first 16 chars including n2f_)
     const prefix = fullKey.substring(0, API_KEY_PREFIX.length + 12);
 
-    // Find by prefix first (faster)
-    const apiKey = apiKeysRepository.getByPrefix(prefix);
+    const apiKey = await apiKeysRepository.getByPrefix(prefix);
     if (!apiKey) {
       return { valid: false, error: 'API key not found' };
     }
 
-    // Verify hash matches
     if (apiKey.key_hash !== hash) {
       return { valid: false, error: 'Invalid API key' };
     }
 
-    // Check if key is expired
     if (apiKey.expires_at) {
       const expiresAt = new Date(apiKey.expires_at);
       if (expiresAt < new Date()) {
@@ -113,8 +94,7 @@ export function validateApiKey(fullKey: string): ApiKeyValidationResult {
       }
     }
 
-    // Update last used timestamp
-    apiKeysRepository.updateLastUsed(apiKey.id);
+    await apiKeysRepository.updateLastUsed(apiKey.id);
 
     return {
       valid: true,
@@ -131,18 +111,17 @@ export function validateApiKey(fullKey: string): ApiKeyValidationResult {
 /**
  * Check rate limits for a user
  */
-export function checkRateLimits(userId: string): { allowed: boolean; error?: string; remaining?: number } {
+export async function checkRateLimits(userId: string): Promise<{ allowed: boolean; error?: string; remaining?: number }> {
   try {
-    const user = usersRepository.getById(userId);
+    const user = await usersRepository.getById(userId);
     if (!user) {
       return { allowed: false, error: 'User not found' };
     }
 
-    const plan = plansRepository.getById(user.plan_id);
+    const plan = await plansRepository.getById(user.plan_id);
     const dailyLimit = plan?.daily_request_limit || 100;
 
-    // Get today's request count
-    const dailyCount = usageRepository.getDailyRequestCount(userId);
+    const dailyCount = await usageRepository.getDailyRequestCount(userId);
 
     if (dailyCount >= dailyLimit) {
       return {
@@ -165,17 +144,17 @@ export function checkRateLimits(userId: string): { allowed: boolean; error?: str
 /**
  * Get all API keys for a user (without hashes)
  */
-export function getUserApiKeys(userId: string): Omit<ApiKey, 'key_hash'>[] {
-  const keys = apiKeysRepository.getByUserId(userId);
+export async function getUserApiKeys(userId: string): Promise<Omit<ApiKey, 'key_hash'>[]> {
+  const keys = await apiKeysRepository.getByUserId(userId);
   return keys.map(({ key_hash, ...rest }) => rest);
 }
 
 /**
  * Revoke an API key
  */
-export function revokeApiKey(userId: string, keyId: string): { success: boolean; error?: string } {
+export async function revokeApiKey(userId: string, keyId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const apiKey = apiKeysRepository.getById(keyId);
+    const apiKey = await apiKeysRepository.getById(keyId);
     if (!apiKey) {
       return { success: false, error: 'API key not found' };
     }
@@ -184,7 +163,7 @@ export function revokeApiKey(userId: string, keyId: string): { success: boolean;
       return { success: false, error: 'API key does not belong to user' };
     }
 
-    apiKeysRepository.revoke(keyId);
+    await apiKeysRepository.revoke(keyId);
     logger.info(`API key revoked: ${apiKey.key_prefix}...`);
 
     return { success: true };
@@ -197,7 +176,7 @@ export function revokeApiKey(userId: string, keyId: string): { success: boolean;
 /**
  * Log API usage
  */
-export function logApiUsage(
+export async function logApiUsage(
   userId: string,
   apiKeyId: string | null,
   connectionId: string | null,
@@ -205,10 +184,10 @@ export function logApiUsage(
   status: 'success' | 'error',
   responseTimeMs: number,
   errorMessage?: string
-): void {
+): Promise<void> {
   try {
-    usageRepository.logRequest(userId, apiKeyId, connectionId, toolName, status, responseTimeMs, errorMessage);
-    usageRepository.incrementMonthly(userId, status === 'success');
+    await usageRepository.logRequest(userId, apiKeyId, connectionId, toolName, status, responseTimeMs, errorMessage);
+    await usageRepository.incrementMonthly(userId, status === 'success');
   } catch (error) {
     logger.error('Failed to log API usage', error);
   }

@@ -20,7 +20,7 @@ declare global {
  * JWT authentication middleware
  * Extracts and validates JWT from Authorization header
  */
-export function jwtAuth(req: Request, res: Response, next: NextFunction): void {
+export async function jwtAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -42,7 +42,7 @@ export function jwtAuth(req: Request, res: Response, next: NextFunction): void {
     return;
   }
 
-  const payload = verifyToken(token);
+  const payload = await verifyToken(token);
   if (!payload) {
     res.status(401).json({
       success: false,
@@ -52,7 +52,7 @@ export function jwtAuth(req: Request, res: Response, next: NextFunction): void {
   }
 
   // Verify user still exists
-  const user = usersRepository.getById(payload.userId);
+  const user = await usersRepository.getById(payload.userId);
   if (!user) {
     res.status(401).json({
       success: false,
@@ -91,7 +91,7 @@ export function adminOnly(req: Request, res: Response, next: NextFunction): void
 /**
  * Optional JWT auth - doesn't fail if no token provided
  */
-export function optionalJwtAuth(req: Request, res: Response, next: NextFunction): void {
+export async function optionalJwtAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -107,7 +107,7 @@ export function optionalJwtAuth(req: Request, res: Response, next: NextFunction)
     return;
   }
 
-  const payload = verifyToken(token);
+  const payload = await verifyToken(token);
   if (payload) {
     req.user = {
       id: payload.userId,

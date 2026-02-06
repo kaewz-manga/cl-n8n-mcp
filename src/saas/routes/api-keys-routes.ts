@@ -12,9 +12,9 @@ router.use(jwtAuth);
  * GET /api/api-keys
  * List user's API keys
  */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const keys = getUserApiKeys(req.user!.id);
+    const keys = await getUserApiKeys(req.user!.id);
 
     res.json({
       success: true,
@@ -32,7 +32,7 @@ router.get('/', (req: Request, res: Response) => {
  * POST /api/api-keys
  * Create a new API key
  */
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   try {
     const { name, connection_id } = req.body;
 
@@ -44,7 +44,7 @@ router.post('/', (req: Request, res: Response) => {
       return;
     }
 
-    const result = createApiKey(req.user!.id, connection_id || null, name);
+    const result = await createApiKey(req.user!.id, connection_id || null, name);
 
     if (!result.success) {
       res.status(400).json({
@@ -85,9 +85,9 @@ router.post('/', (req: Request, res: Response) => {
  * DELETE /api/api-keys/:id
  * Revoke an API key
  */
-router.delete('/:id', (req: Request, res: Response) => {
+router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    const result = revokeApiKey(req.user!.id, req.params.id as string);
+    const result = await revokeApiKey(req.user!.id, req.params.id as string);
 
     if (!result.success) {
       res.status(400).json({

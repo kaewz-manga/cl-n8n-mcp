@@ -12,16 +12,16 @@ router.use(jwtAuth);
  * GET /api/user/usage
  * Get user's usage statistics
  */
-router.get('/usage', (req: Request, res: Response) => {
+router.get('/usage', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const user = usersRepository.getById(userId);
-    const plan = plansRepository.getById(user?.plan_id || 'free');
+    const user = await usersRepository.getById(userId);
+    const plan = await plansRepository.getById(user?.plan_id || 'free');
 
-    const monthlyUsage = usageRepository.getMonthlyUsage(userId);
-    const dailyCount = usageRepository.getDailyRequestCount(userId);
-    const connections = connectionsRepository.countByUserId(userId);
-    const apiKeys = getUserApiKeys(userId);
+    const monthlyUsage = await usageRepository.getMonthlyUsage(userId);
+    const dailyCount = await usageRepository.getDailyRequestCount(userId);
+    const connections = await connectionsRepository.countByUserId(userId);
+    const apiKeys = await getUserApiKeys(userId);
 
     res.json({
       success: true,
@@ -68,9 +68,9 @@ router.get('/usage', (req: Request, res: Response) => {
  * GET /api/user/plans
  * Get available subscription plans
  */
-router.get('/plans', (req: Request, res: Response) => {
+router.get('/plans', async (req: Request, res: Response) => {
   try {
-    const plans = plansRepository.getAll();
+    const plans = await plansRepository.getAll();
 
     res.json({
       success: true,
@@ -96,16 +96,16 @@ router.get('/plans', (req: Request, res: Response) => {
  * GET /api/user/dashboard
  * Get dashboard overview data
  */
-router.get('/dashboard', (req: Request, res: Response) => {
+router.get('/dashboard', async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const user = usersRepository.getById(userId);
-    const plan = plansRepository.getById(user?.plan_id || 'free');
+    const user = await usersRepository.getById(userId);
+    const plan = await plansRepository.getById(user?.plan_id || 'free');
 
-    const monthlyUsage = usageRepository.getMonthlyUsage(userId);
-    const dailyCount = usageRepository.getDailyRequestCount(userId);
-    const connections = connectionsRepository.getByUserId(userId);
-    const apiKeys = getUserApiKeys(userId);
+    const monthlyUsage = await usageRepository.getMonthlyUsage(userId);
+    const dailyCount = await usageRepository.getDailyRequestCount(userId);
+    const connections = await connectionsRepository.getByUserId(userId);
+    const apiKeys = await getUserApiKeys(userId);
 
     res.json({
       success: true,

@@ -12,14 +12,13 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:3011',
-      '/mcp': 'http://localhost:3011',
-      '/health': 'http://localhost:3011',
-      '/stats': 'http://localhost:3011',
+      '/api': 'http://localhost:8787',
+      '/mcp': 'http://localhost:8787',
+      '/health': 'http://localhost:8787',
     },
   },
   build: {
-    outDir: '../public/dashboard',
-    emptyOutDir: true,
+    outDir: '../public',
+    emptyOutDir: false, // Preserve other files (usage.html, data/)
   },
 });

@@ -27,6 +27,8 @@
     "http": "npm run build && npm run start:http",
     "dev": "npm run build && npm run rebuild && npm run validate",
     "dev:http": "MCP_MODE=http nodemon --watch src --ext ts --exec 'npm run build && npm run start:http'",
+    "dev:worker": "wrangler dev",
+    "deploy": "wrangler deploy",
     "test:single-session": "./scripts/test-single-session.sh",
     "test:mcp-endpoint": "node scripts/test-mcp-endpoint.js",
     "test:mcp-endpoint:curl": "./scripts/test-mcp-endpoint.sh",
@@ -130,6 +132,7 @@
     "package.runtime.json"
   ],
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260205.0",
     "@faker-js/faker": "^9.9.0",
     "@testing-library/jest-dom": "^6.6.4",
     "@types/better-sqlite3": "^7.6.13",
@@ -146,7 +149,8 @@
     "nodemon": "^3.1.10",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "wrangler": "^4.63.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.20.1",
@@ -157,12 +161,15 @@
     "express": "^5.1.0",
     "express-rate-limit": "^7.1.5",
     "form-data": "^4.0.5",
+    "hono": "^4.11.7",
+    "jose": "^6.1.3",
     "jsonwebtoken": "^9.0.2",
     "lru-cache": "^11.2.1",
     "n8n": "^2.3.3",
     "n8n-core": "^2.3.2",
     "n8n-workflow": "^2.3.2",
     "openai": "^4.77.0",
+    "socks": "^2.8.7",
     "sql.js": "^1.13.0",
     "tslib": "^2.6.2",
     "uuid": "^10.0.0",

@@ -1,5 +1,7 @@
 // Database
-export { initUsersDatabase, getUsersDatabase, closeUsersDatabase } from './database/init';
+export { initUsersDatabase, getUsersDatabase, closeUsersDatabase, initD1Database, runD1Migrations, getAsyncDatabase } from './database/init';
+export { D1Adapter, SyncToAsyncAdapter, type AsyncDatabase } from './database/d1-adapter';
+export { setDatabaseGetter } from './database/users-repository';
 export {
   usersRepository,
   connectionsRepository,
@@ -31,6 +33,7 @@ export {
   changePassword,
   getUserProfile,
   deleteUser,
+  configureJwt,
   type JWTPayload,
   type AuthResult
 } from './services/auth-service';
@@ -50,5 +53,6 @@ export {
 export {
   getAuthorizationUrl,
   handleOAuthCallback,
-  getEnabledProviders
+  getEnabledProviders,
+  configureOAuth
 } from './services/oauth-service';

@@ -2,11 +2,32 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { createDatabaseAdapter, DatabaseAdapter } from '../../database/database-adapter';
 import { logger } from '../../utils/logger';
+import { D1Adapter, SyncToAsyncAdapter, AsyncDatabase } from './d1-adapter';
+import { setDatabaseGetter } from './users-repository';
 
 let usersDb: DatabaseAdapter | null = null;
+let asyncDb: AsyncDatabase | null = null;
 
 /**
- * Initialize the users database for SaaS functionality
+ * Initialize users database with Cloudflare D1 (Workers mode)
+ */
+export function initD1Database(d1: D1Database): AsyncDatabase {
+  const adapter = new D1Adapter(d1);
+  asyncDb = adapter;
+  setDatabaseGetter(() => adapter);
+  return adapter;
+}
+
+/**
+ * Run migrations on D1 database
+ */
+export async function runD1Migrations(d1: D1Database, migrationSql: string): Promise<void> {
+  await d1.exec(migrationSql);
+  logger.info('D1 database migrations completed');
+}
+
+/**
+ * Initialize the users database for SaaS functionality (Express/Docker mode)
  */
 export async function initUsersDatabase(): Promise<DatabaseAdapter> {
   if (usersDb) {
@@ -26,6 +47,11 @@ export async function initUsersDatabase(): Promise<DatabaseAdapter> {
   // Create database adapter
   usersDb = await createDatabaseAdapter(dbPath);
 
+  // Wrap sync adapter as async for repository compatibility
+  const wrapper = new SyncToAsyncAdapter(usersDb);
+  asyncDb = wrapper;
+  setDatabaseGetter(() => wrapper);
+
   // Run migrations
   await runMigrations(usersDb);
 
@@ -34,7 +60,7 @@ export async function initUsersDatabase(): Promise<DatabaseAdapter> {
 }
 
 /**
- * Get the users database instance
+ * Get the users database instance (legacy sync)
  */
 export function getUsersDatabase(): DatabaseAdapter {
   if (!usersDb) {
@@ -44,7 +70,17 @@ export function getUsersDatabase(): DatabaseAdapter {
 }
 
 /**
- * Run database migrations
+ * Get the async database instance
+ */
+export function getAsyncDatabase(): AsyncDatabase {
+  if (!asyncDb) {
+    throw new Error('Database not initialized. Call initUsersDatabase() or initD1Database() first.');
+  }
+  return asyncDb;
+}
+
+/**
+ * Run database migrations (Express/Docker mode)
  */
 async function runMigrations(db: DatabaseAdapter): Promise<void> {
   const migrationsPath = path.join(process.cwd(), 'migrations', '001_initial.sql');
@@ -100,6 +136,7 @@ export function closeUsersDatabase(): void {
   if (usersDb) {
     usersDb.close();
     usersDb = null;
+    asyncDb = null;
     logger.info('Users database closed');
   }
 }
