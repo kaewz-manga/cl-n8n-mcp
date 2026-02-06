@@ -13,12 +13,12 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "USERS_DB"
 database_name = "cl-n8n-mcp-users"
-database_id = "placeholder-create-with-wrangler-d1-create"
+database_id = "99c4054a-6a3f-47f8-8fbb-4af51a3de14a"
 
 # KV Namespace (rate limiting)
 [[kv_namespaces]]
 binding = "RATE_LIMITS"
-id = "placeholder-create-with-wrangler-kv-namespace-create"
+id = "1aa94926dddc47ad917a6cc0f392ac4d"
 
 # Environment variables (non-secret defaults)
 [vars]
