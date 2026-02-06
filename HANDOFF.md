@@ -2,9 +2,9 @@
 
 > สำหรับ Claude ตัวถัดไปที่จะเข้ามาทำงานต่อ
 
-**Date**: 2026-02-05
+**Date**: 2026-02-06
 **Repo**: https://github.com/kaewz-manga/cl-n8n-mcp
-**Template**: n8n-management-mcp (same pattern)
+**Live**: https://cl-n8n-mcp.suphakitm99.workers.dev
 
 ---
 
@@ -13,63 +13,66 @@
 **cl-n8n-mcp** เป็น Multi-tenant MCP SaaS Platform สำหรับ n8n workflow automation
 
 - **Source**: Fork จาก https://github.com/nerding-io/n8n-mcp-multi-tenant-n8n
-- **Tools**: 31 MCP tools สำหรับ n8n node discovery, validation, workflow management
-- **Pattern**: เหมือน n8n-management-mcp ทุกประการ
+- **Tools**: 20 MCP tools (7 documentation + 13 management)
+- **Runtime**: Cloudflare Workers (Hono framework)
+- **Dashboard**: React SPA served via Workers ASSETS binding
 
 ---
 
-## Current Status: Foundation Complete ✅
+## Current Status: Deployed on Cloudflare Workers ✅
 
 ### สิ่งที่ทำเสร็จแล้ว
 
-1. **Core MCP Server** (จาก fork) ✅
-   - 31 MCP tools ทำงานได้
-   - Multi-tenant via headers (x-n8n-url, x-n8n-key)
-   - Docker deployment ready
-   - Rate limiting
+1. **Cloudflare Workers Migration** ✅
+   - Hono HTTP framework แทน Express
+   - D1 database สำหรับ SaaS user data
+   - KV namespace สำหรับ rate limiting
+   - ASSETS binding สำหรับ dashboard + nodes.db
+   - sql.js asm.js สำหรับ read-only nodes.db (ไม่ใช้ WASM — Workers บล็อก)
+   - Deployed + verified ทุก endpoint
 
-2. **Foundation Structure** (เพิ่มใหม่) ✅
-   - 9 CLAUDE.md files (Quick Links pattern)
-   - 6 agents (debugger, api-tester, security-auditor, code-reviewer, test-runner, documentation)
-   - 6 skills (mcp-protocol, multi-tenant-patterns, api-conventions, dashboard-components, db-migrations, docker-deployment)
-   - 8 commands (deploy, logs, test-api, security-audit, db-query, review-code, update-docs, memory-save)
-   - .mcp.json (Memory MCP configured)
+2. **SaaS Layer** ✅
+   - User registration/login (JWT via jose)
+   - OAuth (GitHub/Google) — ต้อง set client ID/secret ใน secrets
+   - Dashboard (React SPA)
+   - n8n connection CRUD + encrypted API key storage
+   - API key generation (n2f_ prefix)
+   - Usage tracking per user
+   - Rate limiting (KV-based, 50/min, 100/day)
+
+3. **MCP Server** ✅
+   - 20 tools ทำงานครบ (search, get_node, validate, workflow management)
+   - 803 nodes ใน nodes.db
+   - Stateless JSON-RPC handler
+   - Auth via SaaS API key (n2f_) หรือ AUTH_TOKEN
+
+4. **Infrastructure** ✅
+   - D1: `cl-n8n-mcp-users` (99c4054a-6a3f-47f8-8fbb-4af51a3de14a)
+   - KV: `RATE_LIMITS` (1aa94926dddc47ad917a6cc0f392ac4d)
+   - Secrets: AUTH_TOKEN, JWT_SECRET, SAAS_ENCRYPTION_KEY
+   - Docker files ลบแล้ว (ไม่ใช้ Docker อีกต่อไป)
 
 ### สิ่งที่ยังไม่ได้ทำ
 
-1. **SaaS Wrapper** (ต้องสร้างใหม่)
-   - [ ] User registration/login system
-   - [ ] Dashboard (React SPA)
-   - [ ] D1 database for users, connections, api_keys
-   - [ ] Stripe billing integration
-   - [ ] OAuth (GitHub/Google)
-   - [ ] TOTP 2FA
-
-2. **Integration**
-   - [ ] Wrap existing MCP server with SaaS layer
-   - [ ] API key generation (n2f_xxx format)
-   - [ ] Usage tracking per user
+1. **Billing** — Stripe integration ยังไม่มี
+2. **2FA** — TOTP ยังไม่ implement
+3. **Custom domain** — ยังใช้ workers.dev subdomain
+4. **CI/CD** — ยังไม่มี automated deploy pipeline
 
 ---
 
-## Key Architecture
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  SaaS Wrapper (TO BE BUILT)                                 │
-│  - Dashboard (React)                                        │
-│  - Auth (JWT, OAuth, TOTP)                                  │
-│  - D1 Database                                              │
-│  - Stripe Billing                                           │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Core MCP Server (ALREADY EXISTS)                           │
-│  - 31 tools for n8n                                         │
-│  - Multi-tenant via headers                                 │
-│  - Docker deployment                                        │
-└─────────────────────────────────────────────────────────────┘
+Cloudflare Workers
+├── Hono App (src/worker/hono-app.ts)
+│   ├── /health              → Health check
+│   ├── /api/*               → SaaS routes (auth, connections, api-keys, user)
+│   ├── /mcp                 → MCP JSON-RPC endpoint
+│   └── /*                   → Dashboard SPA fallback
+├── D1 Database              → Users, connections, API keys
+├── KV Namespace             → Rate limiting
+└── ASSETS                   → Dashboard (React) + nodes.db
 ```
 
 ---
@@ -78,22 +81,25 @@
 
 ```
 cl-n8n-mcp/
-├── CLAUDE.md              # Main guide (Quick Links)
+├── CLAUDE.md              # Main guide
 ├── HANDOFF.md             # This file
-├── src/                   # Core MCP server (from fork)
-│   ├── CLAUDE.md
-│   ├── mcp/               # MCP tools
-│   ├── http-server/       # Express server
-│   └── ...
-├── dashboard/             # TO BE BUILT
-│   ├── CLAUDE.md          # Guide ready
-│   └── src/
-│       ├── CLAUDE.md
-│       ├── pages/CLAUDE.md
-│       ├── components/CLAUDE.md
-│       └── contexts/CLAUDE.md
-├── migrations/CLAUDE.md   # Schema guide ready
-├── tests/CLAUDE.md        # Test guide ready
+├── wrangler.toml          # Workers config (D1, KV, ASSETS bindings)
+├── .dev.vars              # Local secrets (gitignored)
+├── src/
+│   ├── worker.ts          # Workers entry point
+│   ├── worker/
+│   │   ├── hono-app.ts    # Hono app: CORS, routes, SPA
+│   │   ├── mcp-handler.ts # Stateless MCP handler
+│   │   ├── nodes-db-loader.ts  # sql.js asm.js loader
+│   │   ├── env.ts         # Env type bindings
+│   │   ├── middleware/     # init-services, jwt-auth, rate-limiter
+│   │   └── routes/        # auth, oauth, connections, api-keys, user
+│   ├── mcp/               # MCP tools + handlers
+│   ├── saas/              # Database + services (D1/jose/OAuth)
+│   └── database/          # nodes.db schema + repository
+├── dashboard/             # React SPA (Vite + Tailwind)
+├── migrations/            # D1 SQL migrations
+├── public/                # Built dashboard + nodes.db static assets
 └── .claude/
     ├── agents/            # 6 agents
     ├── skills/            # 6 skills
@@ -104,38 +110,43 @@ cl-n8n-mcp/
 
 ## Important Notes
 
-1. **Core MCP ทำงานได้แล้ว** — ไม่ต้องแก้ไข, แค่ wrap ด้วย SaaS layer
-2. **Pattern ต้องเหมือน n8n-management-mcp** — ดู reference ที่ `n8n-management-mcp` folder
-3. **Theme Color**: Orange (#f97316) — ใช้ class `n2f-*`
-4. **API Key Prefix**: `n2f_`
-
----
-
-## Next Steps
-
-1. อ่าน `CLAUDE.md` และ sub CLAUDE.md files ทั้งหมด
-2. ดู n8n-management-mcp เป็น reference
-3. สร้าง Dashboard (React + Vite + Tailwind)
-4. สร้าง Auth system (JWT, OAuth)
-5. สร้าง D1 schema และ migrations
-6. Integrate กับ Core MCP server
+1. **sql.js WASM ใช้ใน Workers ไม่ได้** — ต้องใช้ `sql-asm.js` (pure JS)
+2. **`__dirname` polyfill** — ต้อง set `globalThis.__dirname = '/'` ก่อน import sql.js
+3. **ASSETS.fetch()** — ต้องใช้แทน self-fetch เพื่อหลีกเลี่ยง SPA catch-all
+4. **FTS5 ไม่รองรับใน sql.js** — search ใช้ LIKE fallback (ทำงานได้ปกติ)
+5. **better-sqlite3 ไม่ได้ install** — Windows ไม่มี build tools, rebuild ใช้ sql.js
+6. **Theme Color**: Orange (#f97316) — ใช้ class `n2f-*`
+7. **API Key Prefix**: `n2f_`
 
 ---
 
 ## Quick Commands
 
 ```bash
-# Core MCP (already works)
-npm run build
-npm run start:http
-docker compose up -d
+# Development
+wrangler dev --port 8787           # Local dev server
+npm run build                      # TypeScript build
+npm run lint                       # Type check
 
-# Test
-npm test
-curl http://localhost:3011/health
+# Database
+npm run rebuild                    # Rebuild nodes.db (sql.js, no FTS5)
+cp data/nodes.db public/data/      # Copy to static assets
+cd dashboard && npm run build      # Build React SPA to ./public/
+
+# D1 Migrations
+wrangler d1 execute cl-n8n-mcp-users --local --file=./migrations/001_initial.sql
+wrangler d1 execute cl-n8n-mcp-users --remote --file=./migrations/001_initial.sql
+
+# Deploy
+wrangler deploy                    # Deploy to Cloudflare Workers
+
+# Secrets
+wrangler secret put AUTH_TOKEN
+wrangler secret put JWT_SECRET
+wrangler secret put SAAS_ENCRYPTION_KEY
 ```
 
 ---
 
-**Last Updated**: 2026-02-05
-**By**: Claude Opus 4.5
+**Last Updated**: 2026-02-06
+**By**: Claude Opus 4.6
