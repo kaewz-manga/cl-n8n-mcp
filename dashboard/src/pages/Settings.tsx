@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { authApi } from '../api/client';
-import { AlertCircle, CheckCircle, Loader2, Shield, User, Trash2 } from 'lucide-react';
+import { authApi, totpApi } from '../api/client';
+import { QRCodeSVG } from 'qrcode.react';
+import { AlertCircle, CheckCircle, Loader2, Shield, ShieldCheck, ShieldOff, User, Trash2, Copy } from 'lucide-react';
 
 export default function Settings() {
-  const { user, plan, logout } = useAuth();
+  const { user, plan, logout, refreshUser } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -18,6 +19,17 @@ export default function Settings() {
   // Delete account state
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // 2FA state
+  const [totpStep, setTotpStep] = useState<'idle' | 'setup' | 'verify'>('idle');
+  const [totpSecret, setTotpSecret] = useState('');
+  const [totpUri, setTotpUri] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+  const [totpLoading, setTotpLoading] = useState(false);
+  const [disablePassword, setDisablePassword] = useState('');
+  const [disableCode, setDisableCode] = useState('');
+  const [showDisable, setShowDisable] = useState(false);
+  const [secretCopied, setSecretCopied] = useState(false);
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,6 +73,70 @@ export default function Settings() {
       setError(response.error?.message || 'Failed to delete account');
     }
     setDeleteLoading(false);
+  };
+
+  // 2FA handlers
+  const handleTotpSetup = async () => {
+    setError('');
+    setSuccess('');
+    setTotpLoading(true);
+
+    const response = await totpApi.setup();
+    if (response.success && response.data) {
+      setTotpSecret(response.data.secret);
+      setTotpUri(response.data.uri);
+      setTotpStep('setup');
+    } else {
+      setError(response.error?.message || 'Failed to setup 2FA');
+    }
+    setTotpLoading(false);
+  };
+
+  const handleTotpEnable = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setTotpLoading(true);
+
+    const response = await totpApi.enable(totpSecret, totpCode);
+    if (response.success) {
+      setSuccess('2FA enabled successfully');
+      setTotpStep('idle');
+      setTotpCode('');
+      setTotpSecret('');
+      setTotpUri('');
+      await refreshUser();
+    } else {
+      setError(response.error?.message || 'Invalid verification code');
+    }
+    setTotpLoading(false);
+  };
+
+  const handleTotpDisable = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setTotpLoading(true);
+
+    const response = await totpApi.disable(disablePassword, disableCode);
+    if (response.success) {
+      setSuccess('2FA disabled successfully');
+      setShowDisable(false);
+      setDisablePassword('');
+      setDisableCode('');
+      await refreshUser();
+    } else {
+      setError(response.error?.message || 'Failed to disable 2FA');
+    }
+    setTotpLoading(false);
+  };
+
+  const handleCopySecret = async () => {
+    try {
+      await navigator.clipboard.writeText(totpSecret);
+      setSecretCopied(true);
+      setTimeout(() => setSecretCopied(false), 2000);
+    } catch {
+      // Clipboard API not available
+    }
   };
 
   const tabs = [
@@ -110,7 +186,7 @@ export default function Settings() {
         </div>
 
         {/* Content */}
-        <div className="flex-1">
+        <div className="flex-1 space-y-6">
           {activeTab === 'profile' && (
             <div className="card space-y-6">
               <h2 className="text-lg font-semibold text-n2f-text">Profile</h2>
@@ -142,49 +218,203 @@ export default function Settings() {
           )}
 
           {activeTab === 'security' && (
-            <div className="card space-y-6">
-              <h2 className="text-lg font-semibold text-n2f-text">Change Password</h2>
-              <form onSubmit={handlePasswordChange} className="space-y-4">
-                <div>
-                  <label className="label">Current Password</label>
-                  <input
-                    type="password"
-                    className="input"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="label">New Password</label>
-                  <input
-                    type="password"
-                    className="input"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="label">Confirm New Password</label>
-                  <input
-                    type="password"
-                    className="input"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={passwordLoading}
-                  className="btn-primary flex items-center gap-2"
-                >
-                  {passwordLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Change Password
-                </button>
-              </form>
-            </div>
+            <>
+              {/* Two-Factor Authentication */}
+              <div className="card space-y-6">
+                <h2 className="text-lg font-semibold text-n2f-text">Two-Factor Authentication</h2>
+
+                {user?.totp_enabled === 1 ? (
+                  /* 2FA Enabled */
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                      <ShieldCheck className="h-5 w-5 text-green-400" />
+                      <span className="text-sm text-green-400">2FA is enabled</span>
+                    </div>
+
+                    {showDisable ? (
+                      <form onSubmit={handleTotpDisable} className="space-y-4">
+                        <p className="text-sm text-n2f-text-secondary">
+                          Enter your password and a current 2FA code to disable.
+                        </p>
+                        <div>
+                          <label className="label">Password</label>
+                          <input
+                            type="password"
+                            className="input"
+                            value={disablePassword}
+                            onChange={(e) => setDisablePassword(e.target.value)}
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="label">2FA Code</label>
+                          <input
+                            type="text"
+                            className="input"
+                            value={disableCode}
+                            onChange={(e) => setDisableCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                            placeholder="000000"
+                            inputMode="numeric"
+                            maxLength={6}
+                            required
+                          />
+                        </div>
+                        <div className="flex gap-3">
+                          <button
+                            type="submit"
+                            disabled={totpLoading || disableCode.length !== 6}
+                            className="btn-danger flex items-center gap-2"
+                          >
+                            {totpLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                            Disable 2FA
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setShowDisable(false); setDisablePassword(''); setDisableCode(''); setError(''); }}
+                            className="px-4 py-2 rounded-lg border border-n2f-border text-n2f-text-secondary hover:text-n2f-text transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <button
+                        onClick={() => setShowDisable(true)}
+                        className="flex items-center gap-2 text-sm text-n2f-text-secondary hover:text-n2f-error transition-colors"
+                      >
+                        <ShieldOff className="h-4 w-4" />
+                        Disable 2FA
+                      </button>
+                    )}
+                  </div>
+                ) : totpStep === 'setup' ? (
+                  /* 2FA Setup */
+                  <form onSubmit={handleTotpEnable} className="space-y-4">
+                    <p className="text-sm text-n2f-text-secondary">
+                      Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)
+                    </p>
+
+                    <div className="flex justify-center p-4 bg-white rounded-lg">
+                      <QRCodeSVG value={totpUri} size={200} />
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-xs text-n2f-text-muted">Or enter this key manually:</p>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 px-3 py-2 rounded-lg bg-n2f-elevated border border-n2f-border text-sm font-mono text-n2f-text break-all">
+                          {totpSecret}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={handleCopySecret}
+                          className="p-2 rounded-lg border border-n2f-border hover:bg-n2f-elevated transition-colors"
+                          title="Copy secret"
+                        >
+                          {secretCopied ? (
+                            <CheckCircle className="h-4 w-4 text-green-400" />
+                          ) : (
+                            <Copy className="h-4 w-4 text-n2f-text-secondary" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="label">Enter the 6-digit code from your app</label>
+                      <input
+                        type="text"
+                        className="input text-center text-lg tracking-widest"
+                        value={totpCode}
+                        onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="000000"
+                        inputMode="numeric"
+                        maxLength={6}
+                        autoFocus
+                        required
+                      />
+                    </div>
+
+                    <div className="flex gap-3">
+                      <button
+                        type="submit"
+                        disabled={totpLoading || totpCode.length !== 6}
+                        className="btn-primary flex items-center gap-2"
+                      >
+                        {totpLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                        Verify & Enable
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setTotpStep('idle'); setTotpCode(''); setTotpSecret(''); setTotpUri(''); setError(''); }}
+                        className="px-4 py-2 rounded-lg border border-n2f-border text-n2f-text-secondary hover:text-n2f-text transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  /* 2FA Not Enabled */
+                  <div className="space-y-4">
+                    <p className="text-sm text-n2f-text-secondary">
+                      Add an extra layer of security to your account using a Time-based One-Time Password (TOTP).
+                    </p>
+                    <button
+                      onClick={handleTotpSetup}
+                      disabled={totpLoading}
+                      className="btn-primary flex items-center gap-2"
+                    >
+                      {totpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}
+                      Enable 2FA
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Change Password */}
+              <div className="card space-y-6">
+                <h2 className="text-lg font-semibold text-n2f-text">Change Password</h2>
+                <form onSubmit={handlePasswordChange} className="space-y-4">
+                  <div>
+                    <label className="label">Current Password</label>
+                    <input
+                      type="password"
+                      className="input"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="label">New Password</label>
+                    <input
+                      type="password"
+                      className="input"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Confirm New Password</label>
+                    <input
+                      type="password"
+                      className="input"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={passwordLoading}
+                    className="btn-primary flex items-center gap-2"
+                  >
+                    {passwordLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Change Password
+                  </button>
+                </form>
+              </div>
+            </>
           )}
 
           {activeTab === 'danger' && (

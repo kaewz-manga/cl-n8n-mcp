@@ -53,7 +53,7 @@ export const authApi = {
     }),
 
   login: (email: string, password: string) =>
-    request<{ token: string; user: User }>('/auth/login', {
+    request<{ token: string; requires_totp: boolean; user: User }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
@@ -114,6 +114,32 @@ export const apiKeysApi = {
   revoke: (id: string) =>
     request<{ message: string }>(`/api-keys/${id}`, {
       method: 'DELETE',
+    }),
+};
+
+// TOTP API
+export const totpApi = {
+  setup: () =>
+    request<{ secret: string; uri: string }>('/auth/totp/setup', {
+      method: 'POST',
+    }),
+
+  enable: (secret: string, code: string) =>
+    request<{ message: string }>('/auth/totp/enable', {
+      method: 'POST',
+      body: JSON.stringify({ secret, code }),
+    }),
+
+  verifyLogin: (token: string, code: string) =>
+    request<{ token: string; user: User }>('/auth/totp/verify-login', {
+      method: 'POST',
+      body: JSON.stringify({ token, code }),
+    }),
+
+  disable: (password: string, code: string) =>
+    request<{ message: string }>('/auth/totp', {
+      method: 'DELETE',
+      body: JSON.stringify({ password, code }),
     }),
 };
 

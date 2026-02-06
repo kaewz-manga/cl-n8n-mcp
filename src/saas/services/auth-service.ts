@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { usersRepository, User, plansRepository } from '../database/users-repository';
 import { hashPassword, verifyPassword } from './encryption-service';
+import { generatePendingToken } from './totp-service';
 import { logger } from '../../utils/logger';
 
 // JWT configuration - env-based for Workers, process.env fallback for Express
@@ -51,6 +52,7 @@ export interface AuthResult {
   user?: User;
   token?: string;
   error?: string;
+  requires_totp?: boolean;
 }
 
 /**
@@ -100,6 +102,13 @@ export async function loginUser(email: string, password: string): Promise<AuthRe
     const isValid = await verifyPassword(password, user.password_hash);
     if (!isValid) {
       return { success: false, error: 'Invalid email or password' };
+    }
+
+    // Check if 2FA is enabled — return pending token instead of full JWT
+    if (user.totp_enabled === 1) {
+      const pendingToken = await generatePendingToken(user.id, user.email);
+      logger.info(`User login requires TOTP: ${email}`);
+      return { success: true, user, token: pendingToken, requires_totp: true };
     }
 
     const token = await generateToken(user);

@@ -2,6 +2,7 @@ import { createMiddleware } from 'hono/factory';
 import type { Env } from '../env';
 import { initD1Database } from '../../saas/database/init';
 import { configureJwt } from '../../saas/services/auth-service';
+import { configureTotpJwt } from '../../saas/services/totp-service';
 import { configureOAuth } from '../../saas/services/oauth-service';
 
 /**
@@ -14,6 +15,7 @@ export const initServices = createMiddleware<{ Bindings: Env }>(async (c, next) 
 
   // Configure JWT with secret from env
   configureJwt(c.env.JWT_SECRET);
+  configureTotpJwt(c.env.JWT_SECRET);
 
   // Configure OAuth providers from env
   configureOAuth({

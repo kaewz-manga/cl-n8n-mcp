@@ -3,6 +3,10 @@ main = "src/worker.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Custom domain
+routes = [
+  { pattern = "cl-n8n-mcp.node2flow.net", custom_domain = true }
+]
 
 # Static assets (dashboard + nodes.db)
 [assets]
@@ -23,5 +27,6 @@ id = "1aa94926dddc47ad917a6cc0f392ac4d"
 # Environment variables (non-secret defaults)
 [vars]
 ENABLE_MULTI_TENANT = "true"
-CORS_ORIGIN = "*"
+CORS_ORIGIN = "https://cl-n8n-mcp.node2flow.net,https://cl-n8n-mcp.suphakitm99.workers.dev"
+FRONTEND_URL = "https://cl-n8n-mcp.node2flow.net"
 LOG_LEVEL = "info"

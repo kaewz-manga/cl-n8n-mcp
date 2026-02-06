@@ -7,7 +7,7 @@ interface AuthContextType {
   plan: Plan | null;
   loading: boolean;
   isAdmin: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; requires_totp?: boolean; pending_token?: string }>;
   loginWithToken: (token: string) => Promise<{ success: boolean; error?: string }>;
   register: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
@@ -49,6 +49,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     const response = await authApi.login(email, password);
     if (response.success && response.data) {
+      if (response.data.requires_totp) {
+        return {
+          success: false,
+          requires_totp: true,
+          pending_token: response.data.token,
+        };
+      }
       localStorage.setItem('n2f_token', response.data.token);
       setUser(response.data.user);
       await refreshUser(); // Get plan info

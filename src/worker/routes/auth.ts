@@ -71,6 +71,7 @@ auth.post('/login', async (c) => {
       success: true,
       data: {
         token: result.token,
+        requires_totp: result.requires_totp || false,
         user: {
           id: result.user!.id,
           email: result.user!.email,
